@@ -2,7 +2,11 @@ name: build
 
 on:
   push:
+    branches:
+      - master
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 defaults:
   run:
@@ -18,15 +22,7 @@ jobs:
         include:
           - os: ubuntu-22.04
             ghc: 9.6.3
-          - os: ubuntu-22.04
-            ghc: 8.10.7
-          - os: ubuntu-22.04-arm
-            ghc: 9.6.3
-          - os: macos-latest
-            ghc: 9.6.3
-          - os: windows-latest
-            ghc: 9.6.3
-    steps:
+    steps: &build-steps
       - uses: actions/checkout@v6
         with:
           submodules: true
@@ -50,3 +46,21 @@ jobs:
       - run: cabal build --enable-tests all
 
       - run: cabal test --enable-tests --test-show-details=direct all
+
+  build-full:
+    name: ${{ matrix.os }}, GHC ${{ matrix.ghc }}
+    if: ${{ !(github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == true || (github.event_name == 'push' && github.repository != 'simplex-chat/JuicyPixels-stbir')) }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            ghc: 8.10.7
+          - os: ubuntu-22.04-arm
+            ghc: 9.6.3
+          - os: macos-latest
+            ghc: 9.6.3
+          - os: windows-latest
+            ghc: 9.6.3
+    steps: *build-steps

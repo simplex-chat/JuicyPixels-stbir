@@ -225,7 +225,10 @@ resize
   -> Int -- ^ new height
   -> Image a
   -> Image a
-resize opts w' h' img@(Image w h v) = unsafePerformIO $ do
+resize opts w' h' img@(Image w h v)
+  | not (fitsLimits opts (pixelProperty componentCount img) (pixelProperty (sizeOf . pixelOpacity) img) w h w' h') =
+      error "Codec.Picture.STBIR.resize: unsupported size or transform"
+  | otherwise = unsafePerformIO $ do
   V.unsafeWith v $ \p -> do
     let comps = pixelProperty componentCount img
     fp <- mallocForeignPtrArray $ w' * h' * comps
@@ -258,3 +261,28 @@ resize opts w' h' img@(Image w h v) = unsafePerformIO $ do
     if res == 0
       then error "Codec.Picture.STBIR.resize returned an error"
       else return $ Image w' h' $ V.unsafeFromForeignPtr0 fp $ w' * h' * comps
+
+fitsLimits :: Options -> Int -> Int -> Int -> Int -> Int -> Int -> Bool
+fitsLimits opts channels componentSize w h w' h' =
+  w > 0 && h > 0 && w' > 0 && h' > 0 && transformFits && work < limit && output < limit
+  where
+    transformFits = case transform opts of
+      Right (Region s0 t0 s1 t1) -> inUnit s0 s1 && inUnit t0 t1
+      Left  (Scale  sx sy ox oy) -> axisFits sx w w' ox && axisFits sy h h' oy
+    inUnit a b = 0 <= a && a < b && b <= 1
+    axisFits scale s d off =
+      scale > 0 && minimum centers >= 0 && maximum centers <= fromIntegral s
+      where centers = [(0.5 + off) / scale, (fromIntegral d - 0.5 + off) / scale]
+    (scaleX, scaleY) = case transform opts of
+      Left  (Scale  sx sy _ _)   -> (realToFrac sx, realToFrac sy)
+      Right (Region s0 t0 s1 t1) -> (axisScale w' w s0 s1, axisScale h' h t0 t1)
+    axisScale d s a b = fromIntegral d / fromIntegral s / realToFrac (b - a) :: Double
+    filterWidth scale = ceiling (4 / scale) + 4
+    c = toInteger channels
+    work = 24 * (wInt + w'Int + filterWidth scaleX)
+         + 24 * (hInt + h'Int + filterWidth scaleY)
+         + 4 * c * (wInt + filterWidth scaleX)
+         + 4 * c * w'Int * (filterWidth scaleY + 3)
+    output = c * toInteger componentSize * w'Int * h'Int
+    (wInt, hInt, w'Int, h'Int) = (toInteger w, toInteger h, toInteger w', toInteger h')
+    limit = 2 ^ (31 :: Int)

@@ -11,6 +11,7 @@ category:             Graphics, Image
 build-type:           Simple
 extra-source-files:
   README.md
+  CHANGELOG.md
   cbits/stb/stb_image_resize.h
 synopsis:             Scale JuicyPixels images with stb_image_resize
 description:
